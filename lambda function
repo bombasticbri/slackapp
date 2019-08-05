@@ -1,0 +1,236 @@
+import botocore.vendored.requests as requests
+from datetime import datetime
+import hashlib
+import time
+import hmac
+import logging
+import boto3
+import os
+import urllib.parse
+import json
+from urllib import parse as urlparse
+import pprint
+
+
+def lambda_handler(event, context):
+    print(event)
+
+    slack_signing_secret = os.getenv("slack_signing_secret")
+    print(slack_signing_secret)
+
+    request_body = event["body"]
+    print(request_body)
+
+    timestamp = event["headers"]["x-slack-request-timestamp"][0]
+    timestamp = int(timestamp)
+
+    # if abs(time.time() - timestamp) > 60 * 5:
+    #     return
+
+    sig_basestring = 'v0:' + str(timestamp) + ':' + request_body
+
+    my_signature = 'v0=' + hmac.new(
+        bytes(slack_signing_secret, 'utf-8'),
+        bytes(sig_basestring, 'utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+
+    print(my_signature)
+
+    slack_signature = event["headers"]['x-slack-signature'][0]
+    print(slack_signature)
+
+    # if hmac.compare_digest(slack_signature, my_signature):
+
+    request_body = json.dumps(urlparse.parse_qs(request_body))
+    pprint.pprint(request_body)
+    
+    #-------------------------------------------------------------------------------------
+    Untested together, each individual piece seems to work
+    #-------------------------------------------------------------------------------------
+
+        # --------------------------------------------------------------------------------
+        # Saving specific data from the triggered payload
+        # --------------------------------------------------------------------------------
+
+
+        message_text = data["message"]["text"]
+
+        print(message_text)
+
+        user_id = data["user"]["id"]
+
+        print(user_id)
+
+        message_timestamp = data["message"]["ts"]
+
+        print(message_timestamp)
+
+        event_channel_id = data["channel"]
+
+        print(event_channel_id)
+
+        # --------------------------------------------------------------------------------
+        # Getting the users data using users.profile using the user_id from trigger
+        # --------------------------------------------------------------------------------
+
+        url = "https://slack.com/api/users.profile.get"
+
+        querystring = {"user": user_id}
+
+        headers = {
+            'Content-Type': "application/x-www-form-urlencoded",
+            'Authorization': "Bearer ",
+            'User-Agent': "PostmanRuntime/7.15.0",
+            'Accept': "*/*",
+            'Cache-Control': "no-cache",
+            'Postman-Token': "",
+            'Host': "slack.com",
+            'cookie': "",
+            'accept-encoding': "gzip, deflate",
+            'Connection': "keep-alive",
+            'cache-control': "no-cache"
+        }
+
+        response = requests.request("GET", url, headers=headers, params=querystring)
+
+        print(response)
+
+        # --------------------------------------------------------------------------------
+        # Getting users email from users.profile
+        # --------------------------------------------------------------------------------
+
+        user_email = data["profile"]["email"]
+
+        print(user_email)
+
+
+        # --------------------------------------------------------------------------------
+        # Add "thumbs up" reaction to Slack message
+        # --------------------------------------------------------------------------------
+
+        url = "https://slack.com/api/reactions.add"
+
+        querystring = {"name": "1+", "channel": channel_name, "timestamp": message_timestamp}
+
+        headers = {
+            'Content-Type': "application/x-www-form-urlencoded",
+            'Authorization': "Bearer ",
+            'User-Agent': "PostmanRuntime/7.15.0",
+            'Accept': "*/*",
+            'Cache-Control': "no-cache",
+            'Postman-Token': "",
+            'Host': "slack.com",
+            'cookie': "",
+            'accept-encoding': "gzip, deflate",
+            'content-length': "",
+            'Connection': "keep-alive",
+            'cache-control': "no-cache"
+        }
+
+        response = requests.request("POST", url, headers=headers, params=querystring)
+
+        print(response)
+
+        # --------------------------------------------------------------------------------
+        # Getting the users in the @xxxxx group in Slack
+        # --------------------------------------------------------------------------------
+
+        url = "https://slack.com/api/usergroups.users.list"
+
+        querystring = {"usergroup": ""}
+
+        headers = {
+            'Content-Type': "application/x-www-form-urlencoded",
+            'Authorization': "Bearer ",
+            'User-Agent': "PostmanRuntime/7.15.0",
+            'Accept': "*/*",
+            'Cache-Control': "no-cache",
+            'Postman-Token': "",
+            'Host': "slack.com",
+            'cookie': "",
+            'accept-encoding': "gzip, deflate",
+            'Connection': "keep-alive",
+            'cache-control': "no-cache"
+        }
+
+        response = requests.request("GET", url, headers=headers, params=querystring)
+
+        print(response)
+
+        approvers_list = data["users"]
+
+        print(approvers_list)
+
+        # --------------------------------------------------------------------------------
+        # IF/ELSE - Getting Jira ticket number from original message - Posting to Jira
+        # --------------------------------------------------------------------------------
+
+        if user_id in approvers_list:
+            jira_ticket = re.search('^AA-\d{0,5}', message_text)
+            print(jira_ticket)
+
+            # --------------------------------------------------------------------------------
+            # Getting previous value in customfield
+            # --------------------------------------------------------------------------------
+
+            url = "https://xxxxxxxx.atlassian.net/rest/api/2/issue/" + jira_ticket
+
+            querystring = {""}
+
+            payload = ""
+            headers = {
+                'Content-Type': "application/json",
+                'Authorization': "Basic ",
+                'User-Agent': "PostmanRuntime/7.15.0",
+                'Accept': "*/*",
+                'Cache-Control': "no-cache",
+                'Postman-Token': "",
+                'Host': "xxxxxxx.atlassian.net",
+                'cookie': "",
+                'accept-encoding': "gzip, deflate",
+                'Connection': "keep-alive",
+                'cache-control': "no-cache"
+            }
+
+            response = requests.request("GET", url, data=payload, headers=headers, params=querystring)
+
+            print(response.text)
+
+            previous_account = data["fields"]["customfield_11111"]["name"]
+
+            print(previous_account)
+
+            previous_account_id = data["fields"]["customfield_11111"]["accountId"]
+
+            print(previous_account_id)
+
+
+            # --------------------------------------------------------------------------------
+            # Post to Jira ticket the people who "approved" -- currently overriding the first user -- only one user showing up
+            # --------------------------------------------------------------------------------
+
+            url = "https://xxxxxxx.atlassian.net/rest/api/2/issue/" + jira_ticket
+
+            payload = {"fields": {"customfield": [{"name": previous_account},{"name" : user_email}]}}
+
+            headers = {
+                'Content-Type': "application/json",
+                'Authorization': "Basic ",
+                'User-Agent': "PostmanRuntime/7.15.0",
+                'Accept': "*/*",
+                'Cache-Control': "no-cache",
+                'Postman-Token': "",
+                'Host': "strongmind.atlassian.net",
+                'cookie': "",
+                'accept-encoding': "gzip, deflate",
+                'content-length': "",
+                'Connection': "keep-alive",
+                'cache-control': "no-cache"
+            }
+
+            response = requests.request("PUT", url, data=payload, headers=headers)
+
+            print(data)
+
+
